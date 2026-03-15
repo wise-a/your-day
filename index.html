@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Day - Time Blocker</title>
@@ -200,7 +202,8 @@
     </div>
 
     <script>
-        // --- GOOGLE CALENDAR INTEGRATION PREP ---
+// --- GOOGLE CALENDAR INTEGRATION ---
+        // TODO: Replace these with your actual credentials from Google Cloud Console
         const GoogleCalendarConfig = {
             clientId: 'YOUR_CLIENT_ID.apps.googleusercontent.com',
             apiKey: 'YOUR_API_KEY',
@@ -208,202 +211,40 @@
             scopes: 'https://www.googleapis.com/auth/calendar.readonly'
         };
 
-        // --- THEME CYCLE LOGIC ---
-        let currentThemeIndex = 0;
-        const themeModes = ['dark', 'light', 'warm'];
-        const themeLabels = ['Dark Mode', 'Light Mode', 'Warm Mode'];
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
 
-        function cycleTheme() {
-            currentThemeIndex = (currentThemeIndex + 1) % themeModes.length;
-            const newTheme = themeModes[currentThemeIndex];
-            
-            document.body.setAttribute('data-theme', newTheme);
-            document.getElementById('theme-btn-text').innerText = themeLabels[currentThemeIndex];
+        // --- GOOGLE API INITIALIZATION ---
+        function gapiLoaded() {
+            gapi.load('client', initializeGapiClient);
         }
 
-        // --- MOCK DATA ---
-        // Using CSS variables dynamically resolved based on the selected theme.
-        const TUESDAY_DATA = {
-            day: 'TUESDAY',
-            events: [
-                { id: 1, title: 'Email / Admin', startTime: '08:00', endTime: '08:30', color: 'var(--color-blue)' },
-                { id: 2, title: 'Mentoring Prep', startTime: '08:30', endTime: '09:00', color: 'var(--color-peach)' },
-                { id: 3, title: 'Mentoring Call', startTime: '09:00', endTime: '10:30', color: 'var(--color-orange)' },
-                { id: 4, title: 'Mentoring Notes / Admin', startTime: '10:30', endTime: '11:30', color: 'var(--color-peach)' },
-                { id: 5, title: 'Email / Admin', startTime: '11:30', endTime: '12:00', color: 'var(--color-blue)' },
-                { id: 6, title: 'Lunch / Break', startTime: '12:00', endTime: '12:30', color: 'var(--color-green)' },
-                { id: 7, title: 'Deep Creative Work', startTime: '12:30', endTime: '17:00', color: 'var(--color-yellow)' },
-                { id: 8, title: 'Loose Ends / Admin', startTime: '17:00', endTime: '17:30', color: 'var(--color-gray)' },
-            ]
-        };
-
-        const THURSDAY_DATA = {
-            day: 'THURSDAY',
-            events: [
-                { id: 1, title: 'Email / Admin', startTime: '08:00', endTime: '08:30', color: 'var(--color-blue)' },
-                { id: 2, title: 'Deep Creative Work', startTime: '08:30', endTime: '12:00', color: 'var(--color-yellow)' },
-                { id: 3, title: 'Lunch / Break', startTime: '12:00', endTime: '12:30', color: 'var(--color-green)' },
-                { id: 4, title: 'Deep Creative Work', startTime: '12:30', endTime: '17:00', color: 'var(--color-yellow)' },
-                { id: 5, title: 'Loose Ends / Admin', startTime: '17:00', endTime: '17:30', color: 'var(--color-gray)' },
-            ]
-        };
-
-        const MOCK_WEEKLY_HOURS = [
-            { label: 'Deep Creative Work', hours: 18.5, color: 'var(--color-yellow)' },
-            { label: 'Social Media Post', hours: 10, color: 'var(--color-red)' },
-            { label: 'Mentoring', hours: 8, color: 'var(--color-orange)' },
-            { label: 'Studio Work', hours: 4.5, color: 'var(--color-purple)' },
-            { label: 'Emails / Admin', hours: 8.5, color: 'var(--color-green)' },
-        ];
-
-        // --- STATE & CONSTANTS ---
-        let currentView = 'Tuesday';
-        let isConnected = false;
-        
-        const TIMELINE_START_MINUTES = 8 * 60; 
-        const TIMELINE_END_MINUTES = 18 * 60;
-        const TOTAL_TIMELINE_MINUTES = TIMELINE_END_MINUTES - TIMELINE_START_MINUTES;
-
-        // --- HELPER FUNCTIONS ---
-        const timeToMinutes = (timeStr) => {
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            return hours * 60 + minutes;
-        };
-
-        const formatTimeLabel = (timeStr) => {
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const displayHours = hours % 12 || 12;
-            const displayMinutes = minutes === 0 ? '' : `:${minutes.toString().padStart(2, '0')}`;
-            return `${displayHours}${displayMinutes} ${ampm}`;
-        };
-
-        // --- DYNAMIC CALCULATIONS ---
-        function calculateTodaysHours(events) {
-            const taskMap = {};
-            
-            events.forEach(ev => {
-                const startMins = timeToMinutes(ev.startTime);
-                const endMins = timeToMinutes(ev.endTime);
-                const duration = (endMins - startMins) / 60;
-                
-                const baseCategory = ev.title; 
-                if (!taskMap[baseCategory]) {
-                    taskMap[baseCategory] = { duration: 0, color: ev.color };
-                }
-                taskMap[baseCategory].duration += duration;
+        async function initializeGapiClient() {
+            await gapi.client.init({
+                apiKey: GoogleCalendarConfig.apiKey,
+                discoveryDocs: GoogleCalendarConfig.discoveryDocs,
             });
-
-            return Object.entries(taskMap)
-                .map(([title, data]) => ({
-                    label: title,
-                    color: data.color,
-                    duration: data.duration
-                }))
-                .sort((a, b) => b.duration - a.duration);
+            gapiInited = true;
         }
 
-        // --- RENDER FUNCTIONS ---
-        function renderStaticGrid() {
-            const gridHours = Array.from({ length: 11 }, (_, i) => i + 8);
-            const gridContainer = document.getElementById('grid-lines-container');
-            const axisContainer = document.getElementById('axis-labels-container');
-            
-            let gridHTML = '';
-            let axisHTML = '';
-
-            gridHours.forEach((hour, index) => {
-                const percent = (index / (gridHours.length - 1)) * 100;
-                
-                gridHTML += `<div class="absolute top-0 bottom-0 border-l border-[var(--grid-line)] transition-colors" style="left: ${percent}%"></div>`;
-                
-                const ampm = hour >= 12 ? 'PM' : 'AM';
-                const displayHour = hour > 12 ? hour - 12 : hour;
-                axisHTML += `<div class="absolute text-sm text-[var(--text-muted)] font-medium -translate-x-1/2" style="left: ${percent}%">${displayHour}${ampm}</div>`;
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GoogleCalendarConfig.clientId,
+                scope: GoogleCalendarConfig.scopes,
+                callback: '', // defined at request time in handleConnect
             });
-
-            gridContainer.innerHTML = gridHTML;
-            axisContainer.innerHTML = axisHTML;
+            gisInited = true;
         }
 
-        function renderViewData(day) {
-            const data = day === 'Tuesday' ? TUESDAY_DATA : THURSDAY_DATA;
-
-            // Update Header & clear Theme input
-            document.getElementById('day-title').innerText = data.day;
-            document.getElementById('day-theme').value = '';
-
-            // Render Today's Hours Column
-            const calculatedTodaysHours = calculateTodaysHours(data.events);
-            const todaysHoursList = document.getElementById('todays-hours-list');
-            todaysHoursList.innerHTML = calculatedTodaysHours.map(item => `
-                <li class="flex items-center gap-3 text-[15px] font-medium text-[var(--text-primary)] transition-colors">
-                    <span class="w-4 h-4 rounded-full shadow-sm border border-black/10 flex-shrink-0 transition-colors" style="background-color: ${item.color};"></span>
-                    <span>${item.label} = ${item.duration} Hours</span>
-                </li>
-            `).join('');
-
-            // Render single Weekly Hours Column
-            const weekly1 = document.getElementById('weekly-hours-list-1');
-            weekly1.innerHTML = MOCK_WEEKLY_HOURS.map(item => `
-                <li class="flex items-center gap-3 text-[15px] font-medium text-[var(--text-primary)] transition-colors">
-                    <span class="w-4 h-4 rounded-full shadow-sm border border-black/10 flex-shrink-0 transition-colors" style="background-color: ${item.color};"></span>
-                    <span>${item.label} = ${item.hours} Hours</span>
-                </li>
-            `).join('');
-
-            // Update Events Timeline
-            const eventsContainer = document.getElementById('events-container');
-            eventsContainer.innerHTML = data.events.map(event => {
-                const startMins = timeToMinutes(event.startTime);
-                const endMins = timeToMinutes(event.endTime);
-                
-                const leftPercent = ((startMins - TIMELINE_START_MINUTES) / TOTAL_TIMELINE_MINUTES) * 100;
-                const widthPercent = ((endMins - startMins) / TOTAL_TIMELINE_MINUTES) * 100;
-                const durationHours = (endMins - startMins) / 60;
-
-                return `
-                    <div class="absolute top-0 bottom-0 rounded-xl border border-black/5 shadow-md group transition-all hover:-translate-y-1 hover:shadow-xl hover:z-20 overflow-hidden"
-                         style="background-color: ${event.color}; left: ${leftPercent}%; width: ${widthPercent}%; margin-left: 2px; margin-right: 2px;">
-                        
-                        <!-- HRS Label hovering above -->
-                        <div class="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-sm font-semibold text-[var(--text-primary)] transition-colors">
-                            ${durationHours} HRS
-                        </div>
-
-                        <!-- 
-                            Text Box mapping correctly:
-                            - "absolute inset-0" ensures text box is constrained purely to the block size.
-                            - "vertical-text" rotates it exactly 180 degrees.
-                            - Natural flow pushes the text strictly to the left edge of the block, wrapping downwards as desired.
-                        -->
-                        <div class="absolute inset-0 p-4 vertical-text transition-colors" style="color: var(--event-text);">
-                            <div class="font-extrabold text-xl leading-snug break-words tracking-tight">${event.title}</div>
-                            <div class="mt-2 text-[13px] font-semibold opacity-80">${formatTimeLabel(event.startTime)} - ${formatTimeLabel(event.endTime)}</div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        // --- INTERACTIVITY ---
-        function switchView(day) {
-            currentView = day;
-            renderViewData(day);
-
-            const btnTue = document.getElementById('btn-tuesday');
-            const btnThu = document.getElementById('btn-thursday');
-            
-            if (day === 'Tuesday') {
-                btnTue.className = 'px-4 py-1 text-sm rounded-md transition-colors bg-blue-600 text-white font-semibold shadow-sm';
-                btnThu.className = 'px-4 py-1 text-sm rounded-md transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]';
-            } else {
-                btnThu.className = 'px-4 py-1 text-sm rounded-md transition-colors bg-blue-600 text-white font-semibold shadow-sm';
-                btnTue.className = 'px-4 py-1 text-sm rounded-md transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]';
-            }
-        }
-
+        // --- CONNECT & FETCH LOGIC ---
         function handleConnect() {
+            if (!gapiInited || !gisInited) {
+                alert("Google APIs are still loading. Please try again in a moment.");
+                return;
+            }
+
+            // Trigger Loading UI
             document.getElementById('btn-connect-nav').disabled = true;
             document.getElementById('btn-connect-overlay').disabled = true;
             
@@ -413,31 +254,92 @@
 
             document.getElementById('icon-calendar-overlay').classList.add('hidden');
             document.getElementById('icon-spinner-overlay').classList.remove('hidden');
-            document.getElementById('text-connect-overlay').innerText = 'Authenticating with Google...';
+            document.getElementById('text-connect-overlay').innerText = 'Authenticating...';
 
-            setTimeout(() => {
-                isConnected = true;
+            // Define the callback for when the user signs in and authorizes
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    resetConnectUI();
+                    throw (resp);
+                }
+                // Token acquired, proceed to fetch data and update UI
+                await fetchCalendarEvents();
+            };
+
+            // Trigger the Google Sign-in popup
+            if (gapi.client.getToken() === null) {
+                // Prompt user to select account on first sign-in
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                // Skip consent dialog for existing sessions
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+
+        async function fetchCalendarEvents() {
+            try {
+                // Fetch upcoming events from the user's primary calendar
+                const response = await gapi.client.calendar.events.list({
+                    'calendarId': 'primary',
+                    'timeMin': (new Date()).toISOString(),
+                    'showDeleted': false,
+                    'singleEvents': true,
+                    'maxResults': 10,
+                    'orderBy': 'startTime',
+                });
                 
-                const overlay = document.getElementById('connect-overlay');
-                overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 300);
+                const events = response.result.items;
+                console.log("Successfully fetched events:", events);
+                
+                // --- Here you would map the fetched 'events' to your TUESDAY_DATA format ---
+                // For now, we'll just trigger the success UI state
+                showSuccessUI();
 
-                const main = document.getElementById('main-content');
-                main.classList.remove('opacity-20', 'pointer-events-none', 'filter', 'blur-sm');
-                main.classList.add('opacity-100');
+            } catch (err) {
+                console.error("Error fetching calendar events:", err);
+                resetConnectUI();
+            }
+        }
 
-                document.getElementById('btn-connect-nav').classList.add('hidden');
-                document.getElementById('status-connected').classList.remove('hidden');
-                document.getElementById('nav-controls').classList.remove('hidden');
+        // --- UI STATE MANAGERS ---
+        function showSuccessUI() {
+            isConnected = true;
+            
+            const overlay = document.getElementById('connect-overlay');
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.remove(), 300);
 
-            }, 1800);
+            const main = document.getElementById('main-content');
+            main.classList.remove('opacity-20', 'pointer-events-none', 'filter', 'blur-sm');
+            main.classList.add('opacity-100');
+
+            document.getElementById('btn-connect-nav').classList.add('hidden');
+            document.getElementById('status-connected').classList.remove('hidden');
+            document.getElementById('nav-controls').classList.remove('hidden');
+        }
+
+        function resetConnectUI() {
+            // Revert buttons to default state if sign-in fails or is cancelled
+            document.getElementById('btn-connect-nav').disabled = false;
+            document.getElementById('btn-connect-overlay').disabled = false;
+            
+            document.getElementById('icon-calendar-nav').classList.remove('hidden');
+            document.getElementById('icon-spinner-nav').classList.add('hidden');
+            document.getElementById('text-connect-nav').innerText = 'Connect Google Calendar';
+
+            document.getElementById('icon-calendar-overlay').classList.remove('hidden');
+            document.getElementById('icon-spinner-overlay').classList.add('hidden');
+            document.getElementById('text-connect-overlay').innerText = 'Connect Calendar Now';
         }
 
         // --- INITIALIZATION ---
         window.onload = () => {
             renderStaticGrid();
             renderViewData(currentView);
-        };
-    </script>
+            
+            // Initialize Google APIs
+            gapiLoaded();
+            gisLoaded();
+        };    </script>
 </body>
 </html>
