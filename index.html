@@ -165,28 +165,41 @@
         let gapiInited = false;
         let gisInited = false;
 
-        // --- GOOGLE API INITIALIZATION ---
+// --- GOOGLE API INITIALIZATION ---
         function gapiLoaded() {
+            console.log("Google API script loaded, initializing client...");
             gapi.load('client', initializeGapiClient);
         }
 
         async function initializeGapiClient() {
-            await gapi.client.init({
-                apiKey: GoogleCalendarConfig.apiKey,
-                discoveryDocs: GoogleCalendarConfig.discoveryDocs,
-            });
-            gapiInited = true;
+            try {
+                await gapi.client.init({
+                    apiKey: GoogleCalendarConfig.apiKey,
+                    discoveryDocs: GoogleCalendarConfig.discoveryDocs,
+                });
+                gapiInited = true;
+                console.log("✅ GAPI Initialized Successfully");
+            } catch (error) {
+                console.error("❌ GAPI Init Error:", error);
+                alert("GAPI Failed to load. Please check the Developer Console.");
+            }
         }
 
         function gisLoaded() {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: GoogleCalendarConfig.clientId,
-                scope: GoogleCalendarConfig.scopes,
-                callback: '', // defined dynamically in handleConnect
-            });
-            gisInited = true;
+            console.log("Google Identity Services loaded, initializing token...");
+            try {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: GoogleCalendarConfig.clientId,
+                    scope: GoogleCalendarConfig.scopes,
+                    callback: '', 
+                });
+                gisInited = true;
+                console.log("✅ GIS Initialized Successfully");
+            } catch (error) {
+                console.error("❌ GIS Init Error:", error);
+            }
         }
-
+        
         // --- THEME CYCLE LOGIC ---
         let currentThemeIndex = 0;
         const themeModes = ['dark', 'light', 'warm'];
