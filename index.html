@@ -3,11 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Day - Time Blocker</title>
-    
-    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
-    <script src="https://apis.google.com/js/api.js" onload="gapiLoaded()" async defer></script>
-    
+    <title>Your Day - Time Blocker</title>    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Theme Variables */
@@ -426,10 +422,13 @@
             document.getElementById('text-connect-overlay').innerText = 'Connect Calendar Now';
         }
 
-        // --- INITIALIZATION ---
+            // --- INITIALIZATION ---
         window.onload = () => {
             renderStaticGrid();
         };
     </script>
+    
+    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
+    <script src="https://apis.google.com/js/api.js" onload="gapiLoaded()" async defer></script>
 </body>
 </html>
